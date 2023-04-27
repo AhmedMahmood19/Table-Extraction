@@ -48,7 +48,7 @@ def uniquify(seq, suffs = count(1)):
     return seq
 
 def detect_and_crop_tables(image, THRESHOLD_PROBA):
-    model = YOLO('best.pt')
+    model = YOLO('yolo_model/best.pt')
     results = model(image)
     cropped_img_list = []
     for box in results[0].boxes:
@@ -84,23 +84,20 @@ class TableExtractionPipeline():
         result.paste(pil_img, (left, top))
         return result
 
-    def generate_structure(self, model, prob, boxes, expand_rowcol_bbox_top, expand_rowcol_bbox_bottom):
+    def generate_structure(self, model, prob, boxes):
         rows = {}
         cols = {}
         idx = 0
 
-        for p, (xmin, ymin, xmax, ymax) in zip(prob, boxes.tolist()):
-
-            xmin, ymin, xmax, ymax = xmin, ymin, xmax, ymax 
+        for p, (xmin, ymin, xmax, ymax) in zip(prob, boxes.tolist()): 
             cl = p.argmax()
             class_text = model.config.id2label[cl.item()]
-            text = f'{class_text}: {p[cl]:0.2f}'
             if (class_text == 'table row')  or (class_text =='table projected row header') or (class_text == 'table column'):
                 pass
             if class_text == 'table row':
-                rows['table row.'+str(idx)] = (xmin, ymin-expand_rowcol_bbox_top, xmax, ymax+expand_rowcol_bbox_bottom)
+                rows['table row.'+str(idx)] = (xmin, ymin, xmax, ymax)
             if class_text == 'table column':
-                cols['table column.'+str(idx)] = (xmin, ymin-expand_rowcol_bbox_top, xmax, ymax+expand_rowcol_bbox_bottom)
+                cols['table column.'+str(idx)] = (xmin, ymin, xmax, ymax)
             idx += 1
         return rows, cols
 
@@ -125,25 +122,23 @@ class TableExtractionPipeline():
         return rows, cols
 
 
-    def object_to_cellsv2(self, master_row:dict, cols:dict, expand_rowcol_bbox_top, expand_rowcol_bbox_bottom, padd_left):
+    def object_to_cellsv2(self, master_row:dict, cols:dict, padd_left):
         cells_img = {}
-        header_idx = 0
         row_idx = 0
-        previous_xmax_col = 0
         new_cols = {}
         new_master_row = {}
-        previous_ymin_row = 0
         new_cols = cols
         new_master_row = master_row
         for k_row, v_row in new_master_row.items():
             
-            _, _, _, _, row_img = v_row
+            row_img = v_row[4]
             xmax, ymax = row_img.size
             xa, ya, xb, yb = 0, 0, 0, ymax
             row_img_list = []
             for idx, kv in enumerate(new_cols.items()):
-                k_col, v_col = kv
-                xmin_col, _, xmax_col, _, col_img = v_col
+                v_col = kv[1]
+                xmin_col=v_col[0]
+                xmax_col=v_col[2]
                 xmin_col, xmax_col = xmin_col - padd_left - 10, xmax_col - padd_left
                 xa = xmin_col
                 xb = xmax_col
@@ -188,13 +183,12 @@ class TableExtractionPipeline():
         for x, col in zip(string.ascii_lowercase, new_headers):
             if f' {x!s}' == col:
                 counter += 1
-        header_char_count = [len(col) for col in new_headers]
 
         df = self.clean_dataframe(df)
         df.to_csv(f'ExtractedTable{i}.csv', index=False)
 
 
-    async def start_process(self, image, TD_THRESHOLD, TSR_THRESHOLD, padd_top, padd_left, padd_bottom, padd_right, expand_rowcol_bbox_top, expand_rowcol_bbox_bottom):
+    async def start_process(self, image, TD_THRESHOLD, TSR_THRESHOLD, padd_top, padd_left, padd_bottom, padd_right):
         image = Image.open(io.BytesIO(image)).convert("RGB")
         print(type(image), type(TD_THRESHOLD))
         cropped_img_list = detect_and_crop_tables(image=image, THRESHOLD_PROBA=TD_THRESHOLD)
@@ -208,12 +202,12 @@ class TableExtractionPipeline():
             table = self.add_padding(unpadded_table, padd_top, padd_right, padd_bottom, padd_left)
 
             model, probas, bboxes_scaled = table_struct_recog(table, THRESHOLD_PROBA=TSR_THRESHOLD)
-            rows, cols = self.generate_structure(model, probas, bboxes_scaled, expand_rowcol_bbox_top, expand_rowcol_bbox_bottom)
+            rows, cols = self.generate_structure(model, probas, bboxes_scaled)
 
             rows, cols = self.sort_table_featuresv2(rows, cols)
             master_row, cols = self.individual_table_featuresv2(table, rows, cols)
 
-            cells_img, max_cols, max_rows = self.object_to_cellsv2(master_row, cols, expand_rowcol_bbox_top, expand_rowcol_bbox_bottom, padd_left)
+            cells_img, max_cols, max_rows = self.object_to_cellsv2(master_row, cols, padd_left)
 
             sequential_cell_img_list = []
             for k, img_list in cells_img.items():
@@ -227,5 +221,5 @@ class TableExtractionPipeline():
 
 async def image_to_csv(image, TD_th, TSR_th, padd_top, padd_left, padd_right, padd_bottom):
     te = TableExtractionPipeline()
-    return await te.start_process(image, TD_THRESHOLD=TD_th , TSR_THRESHOLD=TSR_th , padd_top=padd_top, padd_left=padd_left, padd_bottom=padd_bottom, padd_right=padd_right, expand_rowcol_bbox_top=0, expand_rowcol_bbox_bottom=0)
+    return await te.start_process(image, TD_THRESHOLD=TD_th , TSR_THRESHOLD=TSR_th , padd_top=padd_top, padd_left=padd_left, padd_bottom=padd_bottom, padd_right=padd_right)
     
