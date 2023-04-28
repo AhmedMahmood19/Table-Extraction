@@ -2,3 +2,4 @@ table_*.json
 __pycache__
 Dockerfile
 my_env
+.vscode
