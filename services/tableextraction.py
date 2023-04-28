@@ -48,7 +48,7 @@ def uniquify(seq, suffs = count(1)):
     return seq
 
 def detect_and_crop_tables(image, THRESHOLD_PROBA):
-    model = YOLO('yolo_model/best.pt')
+    model = YOLO('services/YOLO_model/best.pt')
     results = model(image)
     cropped_img_list = []
     for box in results[0].boxes:
@@ -190,7 +190,6 @@ class TableExtractionPipeline():
 
     async def start_process(self, image, TD_THRESHOLD, TSR_THRESHOLD, padd_top, padd_left, padd_bottom, padd_right):
         image = Image.open(io.BytesIO(image)).convert("RGB")
-        print(type(image), type(TD_THRESHOLD))
         cropped_img_list = detect_and_crop_tables(image=image, THRESHOLD_PROBA=TD_THRESHOLD)
 
         if len(cropped_img_list) == 0:
@@ -219,7 +218,7 @@ class TableExtractionPipeline():
             self.create_dataframe(i, cells_pytess_result, max_cols, max_rows)
         return len(cropped_img_list)
 
-async def image_to_csv(image, TD_th, TSR_th, padd_top, padd_left, padd_right, padd_bottom):
+async def image_to_csv(image, table_detection_threshold, table_structure_recognition_threshold, padding_top, padding_left, padding_bottom, padding_right):
     te = TableExtractionPipeline()
-    return await te.start_process(image, TD_THRESHOLD=TD_th , TSR_THRESHOLD=TSR_th , padd_top=padd_top, padd_left=padd_left, padd_bottom=padd_bottom, padd_right=padd_right)
+    return await te.start_process(image, table_detection_threshold, table_structure_recognition_threshold, padding_top, padding_left, padding_bottom, padding_right)
     
