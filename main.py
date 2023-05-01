@@ -2,6 +2,7 @@ from utils.auth import firebase_auth
 from utils.zip import zipfiles
 from services.tableextraction import image_to_csv
 from fastapi import FastAPI, HTTPException, UploadFile, status, Depends
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import firebase_admin
 
@@ -13,6 +14,13 @@ firebase_admin.initialize_app(cred)
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/extract", dependencies=[Depends(firebase_auth)])
 async def extract_csv(file: UploadFile,
