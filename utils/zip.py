@@ -1,16 +1,8 @@
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
 import zipfile
-from io import BytesIO
 
-def zipfiles(file_list):
-    io = BytesIO()
-    zip_filename = "tables.zip"
-    with zipfile.ZipFile(io, mode='w', compression=zipfile.ZIP_DEFLATED) as zip:
+def zipfiles(file_list, zip_filename):
+    with zipfile.ZipFile(zip_filename, mode="w", compression=zipfile.ZIP_DEFLATED) as zipf:
         for fpath in file_list:
-            zip.write(fpath)
-        zip.close()
-    return StreamingResponse(
-        iter([io.getvalue()]),
-        media_type="application/x-zip-compressed",
-        headers = { "Content-Disposition":f"attachment;filename=%s" % zip_filename}
-    )
+            zipf.write(fpath)
+    return FileResponse(path=zip_filename,media_type="application/x-zip-compressed",headers={"Content-Disposition":"attachment; filename=tables.zip"})

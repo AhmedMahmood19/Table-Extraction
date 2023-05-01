@@ -1,7 +1,7 @@
 from utils.auth import firebase_auth
 from utils.zip import zipfiles
 from services.tableextraction import image_to_csv
-from fastapi import FastAPI, HTTPException, UploadFile, status, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, status, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import firebase_admin
@@ -22,8 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+#Background Task
+def remove_file(path: str):
+    os.remove(path)
+
 @app.post("/extract", dependencies=[Depends(firebase_auth)])
-async def extract_csv(file: UploadFile,
+async def extract_csv(background_tasks : BackgroundTasks,
+                      file: UploadFile,
                       table_detection_threshold: float = 0.6,
                       table_structure_recognition_threshold: float = 0.8,
                       padding_top: int = 20,
@@ -60,10 +65,15 @@ async def extract_csv(file: UploadFile,
                                  detail="No table was detected in the image.")
         else:
             file_list = [f'ExtractedTable{i}.csv' for i in range(result)]
-            zipped_response = zipfiles(file_list)
-            #Delete the files from the server so they don't accumulate
+            zip_filename = "tables.zip"
+            zipped_response = zipfiles(file_list=file_list, zip_filename=zip_filename)
+            
+            #Delete the csv files from the server so they don't accumulate
             for file_path in file_list:
                 os.remove(file_path)
+            
+            #Add a background task to delete the zip file when it has been sent
+            background_tasks.add_task(remove_file, zip_filename)
             return zipped_response
     except Exception as err:
         raise HTTPException(status_code=500,
